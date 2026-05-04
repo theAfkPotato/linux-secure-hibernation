@@ -1,3 +1,79 @@
+# Linux with Secure Hibernation
+This is a fork of the Linux Kernel with the goal to bring back hibernation on modern UEFI
+systems without any compromises in security.
+None of this has actually been implemented, this is just a roadmap, but implementation will start soon
+I also plan to merge this with the manline kernel once it is finished
+
+## UEFI Security features
+Modern UEFI systems have a variety of security features such as:
+- A TPM2
+- Secureboot
+
+### The TPM2
+The TPM2 (Trusted Platform Module 2) is a security chip. Its features include:
+- Platform Configuration Registers (PCRs)
+  - The PCRs are memory slots to maintain a measurement of a system state.
+  - It is resistant to spoofing, since PCRs cannot be directly written but only extended: newPCR = Hash(oldPCR || measurement)
+- Hierarchy Sharding: TPM 2.0 organizes entities into four distinct hierarchies:
+  - Platform: Controlled by the BIOS/UEFI firmware.
+  - Storage: Used by the OS to create a tree of encrypted keys.
+  - Endorsement: Contains the unique, factory-burned Endorsement Key (EK) used for privacy and identity.
+  - Null: For ephemeral session keys. 
+- Cryptography
+  - A variety of algorithms (RSA, ECC, AES, SHA-1, SHA-256, and SM3/4)
+  - A superior random number generator
+  - isolated execution for sensitive operations like signing and decryption
+    ensuring that private keys never leave the hardware boundary in plaintext.
+
+### Secure Boot
+Secure Boot aims to prevent boot level malware and rootkits by preventing the loading of unsigned Bootloaders,
+kernels, EFI applications (EFI applications are the kind of binaries the firmware can natively load, most of them
+are bootloaders)
+The verification hierachy looks like this: 
+- Platform Key (PK): Established by the hardware manufacturer to represent the owner of the platform.
+- Key Exchange Keys (KEK): Used to verify the signatures of the Signature Database (db) and the Forbidden Signatures
+  Database (dbx).
+- Signature Database (db): Contains the public keys or hashes of authorized boot loaders, EFI applications,
+  and drivers.
+- Forbidden Signatures Database (dbx): A "blacklist" of revoked keys and hashes known
+  to be malicious or compromised.
+It does NOT lock you into a specific OS since you can:
+- Add your own keys in the UEFI Setup
+- Disable the feature entirely
+
+
+### The relevance of Secure Boot for hibernation on Linux
+The Linux Kernel is always put in lockdown mode (level "integrity" which is the middle way between none and
+"confidential") if it runs in a Secure Boot scenario. This restricts the manipulation of the kernel even for
+root processes with the exception of signed kernel modules. This unfortunately also restricts the loading of
+hibernation images since up until now, it cannot be guaranteed that they have not been tampered with
+
+## How this fork aims to securely re-enable hibernation
+My plan involves 2 Strategies:
+- Encryption
+- Hash verification
+If the system has a TPM2, we have everything needed for secure hibernation. We can ignore if the swap is encrypted or
+not, since it gets encrypted before the resume anyway. We just focus on securing its contents
+
+When hibernating
+- An encryption key will be generated
+- The image that gets dumped to the swap will be encrypted using this key
+- The hash of the encrypted image gets calculated
+- The future PCR value gets calculated without actually extending it.
+- The key will be sealed using this PCR
+- The encrypted key blob gets written to the header of the image into a reserved space previously full of zeros
+
+When the system gets powered on again:
+- The encrypted blob from the image header gets loaded into ram
+- The blob gets replaced with zeros to bring it back to the original state
+- The kernel will calculate the hash of the image again
+- It will extend it to the PCR.
+- It tries to release the sealed key
+- The image gets decrypted on the fly while loading it. That is if the images integrity was verified
+
+**Please note that this mechanism is only secure if the kernel hasnt been tampered with. Secureboot should prevent this though**
+
+
 Linux kernel
 ============
 
