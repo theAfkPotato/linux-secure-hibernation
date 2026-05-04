@@ -53,7 +53,7 @@ My plan involves 2 Strategies:
 - Encryption
 - Hash verification
 If the system has a TPM2, we have everything needed for secure hibernation. We can ignore if the swap is encrypted or
-not, since it gets encrypted before the resume anyway. We just focus on securing its contents
+not, since it gets decrypted before the resume anyway. We just focus on securing its contents
 
 When hibernating
 - An encryption key will be generated
